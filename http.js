@@ -25,7 +25,18 @@ http.createServer((req, res) => {
             res.setHeader('Content-Type', 'application/javascript');
             res.end(data);
         })
-    } else {
+    }else if(req.url === "/data_different_time_stamps.txt"){
+        const file = path.join(__dirname, 'data_different_time_stamps.txt')
+        fs.readFile(file, 'utf8', (err, data)=>{
+            if(err){
+                res.statusCode = 500
+                res.end('Server error')
+                return
+            }
+            res.setHeader('Content-Type', 'text/plain')
+            res.end(data)
+        })
+    }else {
         res.statusCode = 404;
         res.end('Page not found');
     }
