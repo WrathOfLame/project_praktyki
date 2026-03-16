@@ -13,6 +13,7 @@ const yScale = d3.scaleLinear().range([maxHeight, 0])
 const svg = d3.select('#container').append('svg')
   .attr('width', xSize)
   .attr('height', ySize)
+  .attr('style', 'cursor: crosshair;')
   .append('g')
   .attr('transform', `translate(${margin.left}, ${margin.top})`)
 
@@ -43,9 +44,12 @@ yScale.domain([0, d3.max(allYVals)])
 
 svg.append('g')
     .attr('transform', `translate(0, ${maxHeight})`)
+    .attr('class', 'x-axis')
     .call(xAxis)
 
-svg.append('g').call(yAxis)
+svg.append('g')
+    .attr('class', 'y-axis')
+    .call(yAxis)
 
 svg.selectAll('path.series')
     .data(seriesData)
@@ -64,11 +68,11 @@ const container = document.getElementById('container')
 
 const vertical_line = svg.append('line')
     .attr('stroke', 'gray')
-    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', 5,5)
 
 const horizontal_line = svg.append('line')
     .attr('stroke', 'gray')
-    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', 5,5)
 
 function updateMousePos(event) {
     const rect = container.getBoundingClientRect()
@@ -99,11 +103,11 @@ function updateMousePos(event) {
     seriesData.forEach(s => {
         const values = s.values
         for(let i = 0; i<values.length - 1; i++){
-            const x1 = values[i]
-            const x2 = values[i+1]
-            if((xValNormalized >= x1.x && xValNormalized <= x2.x) || (xValNormalized >= x2.x && xValNormalized <= x1.x)){
-                const t = (xValNormalized - x1.x) / (x2.x - x1.x)
-                const yAtX = x1.y + t * (x2.y - x1.y)
+            const p1 = values[i]
+            const p2 = values[i+1]
+            if(xValNormalized >= p1.x && xValNormalized <= p2.x){
+                const t = (xValNormalized - p1.x) / (p2.x - p1.x)
+                const yAtX = p1.y + t * (p2.y - p1.y)
                 intersections.push({x: xValNormalized, y: yAtX})
                 break
             }
@@ -116,8 +120,93 @@ function updateMousePos(event) {
         .attr('cx', d => xScale(d.x))
         .attr('cy', d => yScale(d.y))
         .attr('r', 4)
-        .attr('fill', 'red')
+        .attr('fill', 'white')
+        .attr('stroke', 'black')
+        .attr('stroke-width', 1.5)
 }
 
 container.addEventListener('mousemove', updateMousePos)
 container.addEventListener('scroll', updateMousePos)
+
+// Adding zooming into graph and creating drag selection area
+const brush = d3.brush()
+    .extent([[0,0], [maxWidth, maxHeight]])
+    .on("end", brushed)
+
+svg.append("g")
+    .attr("class", "brush")
+    .call(brush)
+
+function brushed(event){
+    if (!event.selection) return
+
+    const x0 = event.selection[0][0]
+    const x1 = event.selection[1][0]
+    const y0 = event.selection[0][1]
+    const y1 = event.selection[1][1]
+
+    const newXDomain = [xScale.invert(x0), xScale.invert(x1)]
+    const newYDomain = [yScale.invert(y1), yScale.invert(y0)]
+
+    xScale.domain(newXDomain)
+    yScale.domain(newYDomain)
+
+    svg.select('.x-axis').call(xAxis)
+    svg.select('.y-axis').call(yAxis)
+
+    const line = d3.line()
+        .x(d => xScale(d.x))
+        .y(d => yScale(d.y))
+    svg.selectAll('.series').attr('d', d => line(d.values))
+    svg.select(".brush").call(brush.move, null)
+}
+
+// Adding reset button for zoom
+const butt = document.getElementById('zoomout_butt')
+butt.addEventListener('click', () => {
+    const allXVals = seriesData.flatMap(s => s.values.map(v => v.x))
+    const allYVals = seriesData.flatMap(s => s.values.map(v => v.y))
+    xScale.domain(d3.extent(allXVals))
+    yScale.domain([0, d3.max(allYVals)])
+    svg.select('.x-axis').call(xAxis)
+    svg.select('.y-axis').call(yAxis)
+    const line = d3.line()
+        .x(d => xScale(d.x))
+        .y(d => yScale(d.y))
+    svg.selectAll('.series').attr('d', d => line(d.values))
+})
+
+// Creating legend
+const legend = document.getElementById('legend')
+fetch('data_different_time_stamps.txt')
+  .then(res => res.json())
+  .then(raw => {
+    seriesData = Object.entries(raw).map(([key, points]) => ({
+      name: key,
+      values: points.map(([x, y]) => ({ x, y }))
+    }))
+    seriesData.forEach(s => {
+        const checkbox = document.createElement('input')
+        checkbox.type = 'checkbox'
+        checkbox.style.marginTop = '5px'
+        checkbox.checked = true
+        legend.appendChild(checkbox)
+        const legendName = document.createElement('span')
+        legendName.textContent = s.name
+        legendName.style.marginTop = '5px'
+        legendName.setAttribute('id', `legend-${s.name}`)
+        legend.appendChild(legendName)
+        legend.appendChild(document.createElement('br'))
+
+        checkbox.addEventListener('change', () => {
+            const line = svg.selectAll('.series').filter(d => d.name === s.name)
+            if(checkbox.checked){
+                line.style('display', null)
+                legendName.style.textDecoration = null
+            } else {
+                line.style('display', 'none')
+                legendName.style.textDecoration = 'line-through'
+            }
+        })
+    })
+})
