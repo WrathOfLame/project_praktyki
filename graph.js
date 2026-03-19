@@ -101,34 +101,38 @@ function updateMousePos(event) {
     // Adding dots in places of intersetion
     const intersections = []
     seriesData.forEach(s => {
-        const values = s.values
-        for(let i = 0; i<values.length - 1; i++){
-            const p1 = values[i]
-            const p2 = values[i+1]
-            if(xValNormalized >= p1.x && xValNormalized <= p2.x){
-                const t = (xValNormalized - p1.x) / (p2.x - p1.x)
-                const yAtX = p1.y + t * (p2.y - p1.y)
-                intersections.push({x: xValNormalized, y: yAtX})
-                break
+        if(document.getElementById(`checkbox-${s.name}`).checked){
+            const values = s.values
+            for(let i = 0; i<values.length - 1; i++){
+                const p1 = values[i]
+                const p2 = values[i+1]
+                if(xValNormalized >= p1.x && xValNormalized <= p2.x){
+                    const t = (xValNormalized - p1.x) / (p2.x - p1.x)
+                    const yAtX = p1.y + t * (p2.y - p1.y)
+                    intersections.push({x: xValNormalized, y: yAtX})
+                    break
+                }
             }
         }
     })
+    
     svg.selectAll('circle.intersection')
         .data(intersections)
         .join('circle')
         .attr('class', 'intersection')
         .attr('cx', d => xScale(d.x))
         .attr('cy', d => yScale(d.y))
-        .attr('r', 4)
+        .attr('r', 2.5)
         .attr('fill', 'white')
         .attr('stroke', 'black')
-        .attr('stroke-width', 1.5)
+        .attr('stroke-width', 1)
 }
 
 container.addEventListener('mousemove', updateMousePos)
 container.addEventListener('scroll', updateMousePos)
 
 // Adding zooming into graph and creating drag selection area
+let zoomed = false
 const brush = d3.brush()
     .extent([[0,0], [maxWidth, maxHeight]])
     .on("end", brushed)
@@ -139,20 +143,37 @@ svg.append("g")
 
 function brushed(event){
     if (!event.selection) return
+    zoomed = true
+    // Adding dots for each point in graph
+    fetch('data_different_time_stamps.txt').then(res => res.json())
+        .then(raw => {
+            seriesData = Object.entries(raw).map(([key, points]) => ({
+                name: key,
+                values: points.map(([x, y]) => ({ x, y }))
+            }))
+            seriesData.forEach(s => {
+                svg.selectAll(`circle.point-${s.name}`)
+                    .data(s.values)
+                    .join('circle')
+                    .attr('class', `point-${s.name}`)
+                    .attr('cx', d => xScale(d.x))
+                    .attr('cy', d => yScale(d.y))
+                    .attr('r', 3)
+                    .attr('fill', 'white')
+                    .attr('stroke', 'steelblue')
 
+            })
+        })
+    
+    //brushing
     const x0 = event.selection[0][0]
     const x1 = event.selection[1][0]
-    const y0 = event.selection[0][1]
-    const y1 = event.selection[1][1]
 
     const newXDomain = [xScale.invert(x0), xScale.invert(x1)]
-    const newYDomain = [yScale.invert(y1), yScale.invert(y0)]
 
     xScale.domain(newXDomain)
-    yScale.domain(newYDomain)
 
     svg.select('.x-axis').call(xAxis)
-    svg.select('.y-axis').call(yAxis)
 
     const line = d3.line()
         .x(d => xScale(d.x))
@@ -161,9 +182,8 @@ function brushed(event){
     svg.select(".brush").call(brush.move, null)
 }
 
-// Adding reset button for zoom
-const butt = document.getElementById('zoomout_butt')
-butt.addEventListener('click', () => {
+// Adding resetting for zoom and resetting zoom dots
+container.addEventListener('dblclick', () => {
     const allXVals = seriesData.flatMap(s => s.values.map(v => v.x))
     const allYVals = seriesData.flatMap(s => s.values.map(v => v.y))
     xScale.domain(d3.extent(allXVals))
@@ -174,6 +194,9 @@ butt.addEventListener('click', () => {
         .x(d => xScale(d.x))
         .y(d => yScale(d.y))
     svg.selectAll('.series').attr('d', d => line(d.values))
+
+    svg.selectAll('circle').remove()
+    zoomed = false
 })
 
 // Creating legend
@@ -185,17 +208,51 @@ fetch('data_different_time_stamps.txt')
       name: key,
       values: points.map(([x, y]) => ({ x, y }))
     }))
+    const counters = {}
     seriesData.forEach(s => {
+        const row = document.createElement('tr')
+        legend.appendChild(row)
+
         const checkbox = document.createElement('input')
         checkbox.type = 'checkbox'
-        checkbox.style.marginTop = '5px'
         checkbox.checked = true
-        legend.appendChild(checkbox)
+        checkbox.setAttribute('id', `checkbox-${s.name}`)
+        row.appendChild(checkbox)
+
         const legendName = document.createElement('span')
         legendName.textContent = s.name
-        legendName.style.marginTop = '5px'
         legendName.setAttribute('id', `legend-${s.name}`)
-        legend.appendChild(legendName)
+        row.appendChild(legendName)
+        
+        // Adding mouse move event to show y value at current x for each graph
+        const counter = document.createElement('span')
+        row.appendChild(counter)
+        counters[s.name] = counter
+        
+        container.addEventListener('mousemove', event => {
+            const rect = container.getBoundingClientRect()
+            const mouseX = event.clientX - rect.left - margin.left;
+
+            const xVal = xScale.invert(mouseX);
+            const values = s.values;
+            for (let i = 0; i < values.length - 1; i++) {
+                const p1 = values[i];
+                const p2 = values[i + 1];
+            if (
+                (xVal >= p1.x && xVal <= p2.x) ||
+                (xVal >= p2.x && xVal <= p1.x)
+                ){
+                    const t = (xVal - p1.x) / (p2.x - p1.x);
+                    const y = p1.y + t * (p2.y - p1.y);
+
+                    counter.textContent = ` = ${y.toFixed(2)}`;
+                    row.appendChild(counter)
+                    
+                    break;
+                }
+            }
+        });
+        
         legend.appendChild(document.createElement('br'))
 
         checkbox.addEventListener('change', () => {
@@ -203,10 +260,58 @@ fetch('data_different_time_stamps.txt')
             if(checkbox.checked){
                 line.style('display', null)
                 legendName.style.textDecoration = null
+                svg.selectAll(`circle.point-${s.name}`)
+                    .data(s.values)
+                    .join('circle')
+                    .attr('class', `point-${s.name}`)
+                    .attr('cx', d => xScale(d.x))
+                    .attr('cy', d => yScale(d.y))
+                    .attr('r', 3)
+                    .attr('fill', 'white')
+                    .attr('stroke', 'steelblue')
             } else {
                 line.style('display', 'none')
                 legendName.style.textDecoration = 'line-through'
+                svg.selectAll(`circle.point-${s.name}`).remove()
             }
         })
     })
+})
+
+// marking circles of points if the graph depending on cursor position
+container.addEventListener('mousemove', event => {
+    if (zoomed) {
+        const rect = container.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left - margin.left;
+        const xVal = xScale.invert(mouseX);
+        seriesData.forEach(s => {
+            const values = s.values;
+
+            // Find closest point in this series
+            let closest = values[0];
+            values.forEach(p => {
+                if (Math.abs(p.x - xVal) < Math.abs(closest.x - xVal)) {
+                    closest = p;
+                }
+            });
+
+            if(document.getElementById(`checkbox-${s.name}`).checked) {
+            // Reset all points first
+            svg.selectAll(`circle.point-${s.name}`)
+                .data(s.values)
+                .join('circle')
+                .attr('class', `point-${s.name}`)
+                .attr('cx', d => xScale(d.x))
+                .attr('cy', d => yScale(d.y))
+                .attr('r', 3)
+                .attr('fill', 'white')
+                .attr('stroke', 'steelblue')
+
+            // Highlight only the closest one
+            svg.selectAll(`circle.point-${s.name}`)
+                .filter(d => d === closest)
+                .attr("fill", "gray");
+            }
+        });
+    }
 })
