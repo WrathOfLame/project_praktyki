@@ -21,7 +21,14 @@ const svg = d3.select(container).append('svg')
   .append('g')
   .attr('transform', `translate(${margin.left}, ${margin.top})`)
 
-  container.setAttribute('style', `width: ${xSize}px; height: ${ySize}px;`)
+svg.append("defs")
+  .append("clipPath")
+  .attr("id", "clip")
+  .append("rect")
+  .attr("width", maxWidth)
+  .attr("height", maxHeight)
+
+container.setAttribute('style', `width: ${xSize}px; height: ${ySize}px;`)
 
 // Axes generating
 const xAxis = d3.axisBottom(xScale)
@@ -61,12 +68,36 @@ fetch('data_different_time_stamps.txt')
             .data(seriesData)
             .join('path')
             .attr('class', 'series')
+            .attr("clip-path", "url(#clip)")
             .attr('fill', 'none')
             .attr('stroke', d => colorScale(d.name))
             .attr('stroke-width', 1.5)
             .attr('d', d => line(d.values))
         
         // creating additional lines for each point in graph
+        const xTicks = xScale.ticks();
+        const yTicks = yScale.ticks();
+        svg.append('g')
+            .attr('class', 'grid grid-y')
+            .attr("stroke", "lightgray")
+            .attr('stroke-width', 0.5)
+            .attr("stroke-opacity", 0.7)
+            .call(d3.axisLeft(yScale)
+                .tickValues(yTicks.filter((d, i) => i % 2 === 0))
+                .tickSize(-maxWidth)
+                .tickFormat('')        
+        )
+        svg.append('g')
+            .attr('class', 'grid grid-x')
+            .attr("stroke", "lightgray")
+            .attr('stroke-width', 0.5)
+            .attr("stroke-opacity", 0.7)
+            .attr('transform', `translate(0, ${maxHeight})`)
+            .call(d3.axisBottom(xScale)
+                .tickValues(xTicks.filter((d, i) => i % 2 === 0))
+                .tickSize(-maxHeight)
+                .tickFormat('')
+        )
         
 })
 .catch(err => console.error('Error loading data:', err))
@@ -83,8 +114,11 @@ const horizontal_line = svg.append('line')
 
 function updateMousePos(event) {
     const rect = container.getBoundingClientRect()
-    const mouseX = event.clientX - rect.left - margin.left
-    const mouseY = event.clientY - rect.top - margin.top
+    const mouseXRaw = event.clientX - rect.left - margin.left
+    const mouseYRaw = event.clientY - rect.top - margin.top
+    const mouseX = Math.max(0, Math.min(maxWidth, mouseXRaw))
+    const mouseY = Math.max(0, Math.min(maxHeight, mouseYRaw))
+    if(mouseXRaw < 0 || mouseXRaw > maxWidth || mouseYRaw < 0 || mouseYRaw > maxHeight) return
     vertical_line
         .attr('x1', mouseX)
         .attr('y1', 0)
@@ -127,6 +161,7 @@ function updateMousePos(event) {
         .data(intersections)
         .join('circle')
         .attr('class', 'intersection')
+        .attr("clip-path", "url(#clip)")
         .attr('cx', d => xScale(d.x))
         .attr('cy', d => yScale(d.y))
         .attr('r', 2.5)
@@ -157,6 +192,7 @@ function brushed(event){
             .data(s.values)
             .join('circle')
             .attr('class', `point-${s.name}`)
+            .attr("clip-path", "url(#clip)")
             .attr('cx', d => xScale(d.x))
             .attr('cy', d => yScale(d.y))
             .attr('r', 3)
@@ -243,7 +279,6 @@ fetch('data_different_time_stamps.txt')
             const mouseX = event.clientX - rect.left - margin.left;
             const mouseY = event.clientY - rect.top - margin.top;
             const xVal = xScale.invert(mouseX)
-            const yVal = yScale.invert(mouseY)
             const values = s.values
             let closest = s.values[0]
             values.forEach(p => {
@@ -254,10 +289,7 @@ fetch('data_different_time_stamps.txt')
             for (let i = 0; i < values.length - 1; i++) {
                 const p1 = values[i]
                 const p2 = values[i + 1]
-                if (
-                    (xVal >= p1.x && xVal <= p2.x) || 
-                    (yVal >= p1.y && yVal <= p2.y)
-                ){
+                if (xVal >= p1.x && xVal <= p2.x){
                     const t = (xVal - p1.x) / (p2.x - p1.x)
                     const y = p1.y + t * (p2.y - p1.y)
                     counterX.textContent = ` x = ${closest.x.toFixed(3)}`;
@@ -275,7 +307,8 @@ fetch('data_different_time_stamps.txt')
             if(checkbox.checked){
             line.style('display', null)
             legendName.style.textDecoration = null
-            svg.selectAll(`circle.point-${s.name}`)
+            if(zoomed){
+                svg.selectAll(`circle.point-${s.name}`)
                 .data(s.values)
                 .join('circle')
                 .attr('class', `point-${s.name}`)
@@ -284,6 +317,8 @@ fetch('data_different_time_stamps.txt')
                 .attr('r', 3)
                 .attr('fill', 'white')
                 .attr('stroke', 'steelblue')
+            
+                }
             } else {
                 line.style('display', 'none')
                 legendName.style.textDecoration = 'line-through'
@@ -316,6 +351,7 @@ container.addEventListener('mousemove', event => {
                     .data(s.values)
                     .join('circle')
                     .attr('class', `point-${s.name}`)
+                    .attr("clip-path", "url(#clip)")
                     .attr('cx', d => xScale(d.x))
                     .attr('cy', d => yScale(d.y))
                     .attr('r', 3)
