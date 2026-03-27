@@ -1,11 +1,31 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>D3 graph creating</title></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph</title>
+</head>
 <body>
-  <div id="container"></div>
-  <div id="cursor_locator"></div>
-  <table id = 'legend'></table>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="graph.js"></script>
+    <div id="container"></div>
+    <div id="counter"></div>
+    <table id="legend"></table>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            position: relative;
+            overflow: hidden;
+        }
+        table{
+            margin-left: 20px;
+        }
+        #counter{
+            margin-left: 20px;
+        }
+    </style>
+    <script src="/echarts.min.js"></script>
+    <script src="graph.js"></script>
 </body>
 </html>
